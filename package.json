@@ -1,0 +1,26 @@
+{
+  "name": "webflow-wishlist-scraper",
+  "version": "1.0.0",
+  "description": "Scrapes data from the Webflow Wishlist website",
+  "main": "finance.js",
+  "dependencies": {
+    "axios": "^0.21.0",
+    "dotenv": "^8.2.0",
+    "puppeteer": "^5.2.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "run": "node scrape.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emileperron/webflow-wishlist-scraper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/emileperron/webflow-wishlist-scraper/issues"
+  },
+  "homepage": "https://github.com/emileperron/webflow-wishlist-scraper#readme",
+  "author": "Émile Perron",
+  "license": "MIT"
+}
