@@ -9,13 +9,14 @@ if (configResult.error || !configResult.parsed.PUSH_URL) {
     throw new Error("You must define a value for PUSH_URL in your .env file.");
 }
 
+let browser;
 
 (async () => {
-    const browser = await puppeteer.launch({ headless: true });
+    browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     await page.setExtraHTTPHeaders({ DNT: "1" });
     await page.setViewport({ width: 1920, height: 1080 });
-    await page.goto(wishlistUrl, { waitUntil: "networkidle2", timeout: 15000 });
+    await page.goto(wishlistUrl, { waitUntil: "networkidle2", timeout: 30000 });
 
     try {
         const ideasByStatuses = await getAllIdeasByStatus(page);
@@ -52,7 +53,7 @@ async function getStatuses(page) {
 }
 
 async function getRecentIdeas(page) {
-    await page.goto(wishlistUrl + recentUrlQuery, { waitUntil: "networkidle2", timeout: 15000 });
+    await page.goto(wishlistUrl + recentUrlQuery, { waitUntil: "networkidle2", timeout: 30000 });
     return await getPageIdeas(page);
 }
 
@@ -61,7 +62,7 @@ async function getAllIdeasByStatus(page) {
 
     for (const status of statuses) {
         await delay(1500); // No need to be rude to Webflow's servers...
-        await page.goto(status.url, { waitUntil: "networkidle2", timeout: 15000 });
+        await page.goto(status.url, { waitUntil: "networkidle2", timeout: 30000 });
         status.ideas = await getAllPaginatedIdeas(page);
     }
 
@@ -89,16 +90,17 @@ async function goToNextPage(page) {
     }
 
     await delay(1500); // No need to be rude to Webflow's servers...
-    await page.goto(nextPageUrl, { waitUntil: "networkidle2", timeout: 15000 });
+    await page.goto(nextPageUrl, { waitUntil: "networkidle2", timeout: 30000 });
     return true;
 }
 
 async function getPageIdeas(page) {
-    return page.evaluate(() => {
+    let ideas = await page.evaluate(() => {
         const ideas = [];
         for (const ideaNode of document.querySelectorAll('.portal-content ul.list-ideas > li.idea')) {
             const metaLine1 = ideaNode.querySelector('.idea-meta-created .idea-meta-secondary:first-child').textContent.trim();
             const statusNode = ideaNode.querySelector('.status-pill');
+            const ideaUrl = ideaNode.querySelector('.idea-link').href;
 
             ideas.push({
                 name: ideaNode.querySelector('h3').textContent.trim(),
@@ -110,10 +112,72 @@ async function getPageIdeas(page) {
                 voteCount: ideaNode.querySelector('.vote-count').textContent.trim(),
                 commentCount: ideaNode.querySelector('.comment-count').textContent.trim(),
                 status: statusNode ? statusNode.textContent.trim() : null,
-                url: ideaNode.querySelector('.idea-link').href,
+                url: ideaUrl
             });
         }
         return ideas;
+    });
+
+
+    for (const idea of ideas) {
+        const contentDetails = await getIdeaContentFromUrl(idea.url);
+        idea.contentText = contentDetails.text;
+        idea.contentHtml = contentDetails.html;
+    }
+
+    return filterIdeasForSpam(ideas);
+}
+
+async function getIdeaContentFromUrl(url) {
+    await delay(1500); // No need to be rude to Webflow's servers...
+    const newPage = await browser.newPage();
+    await newPage.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+
+    return await newPage.evaluate(() => {
+        const descriptionNode = document.querySelector('.idea-content .description');
+        return {
+            html: descriptionNode.innerHTML.trim(),
+            text: descriptionNode.textContent.trim(),
+        };
+    });
+}
+
+function filterIdeasForSpam(ideas) {
+    const webflowRelatedWords = [
+        'webflow',
+        'wf',
+        'user',
+        'session',
+        'cookie',
+        'server',
+        'accessibility',
+        'account',
+        'api',
+        'data',
+        'hosting',
+        'billing',
+        'cms',
+        'dashboard',
+        'designer',
+        'ecommerce',
+        'forms',
+        'hosting',
+        'integration',
+        'edit',
+        'asset',
+        'export',
+        'site',
+        'layout',
+        'style',
+        'class',
+        'element',
+        'import',
+        'project',
+    ];
+    const wordChecker = new RegExp(webflowRelatedWords.join("|"));
+
+    return ideas.filter((idea) => {
+        return wordChecker.test(idea.contentText);
     });
 }
 
@@ -129,67 +193,6 @@ async function getStatuses(page) {
         }
         return statuses;
     });
-}
-
-async function handleInitialLogin() {
-    status = 'handleInitialLogin';
-    verbose('Starting the login process.');
-
-    // If a connection has been established previously, there might already be a card on file - check to log in with it
-    if (await page.$('.carte-memorisee a[role="button"]')) {
-        verbose('A memorized card is suggested - selecting it.');
-
-        return await Promise.all([
-            page.click('.carte-memorisee a[role="button"]'),
-            page.waitForSelector('#champsReponse, input[name="motDePasse"]', { timeout: 30000 }),
-        ]);
-    } else {
-        verbose('The user\'s code is requested: entering it.');
-
-        let userCodeInput = await page.$('input[name="codeUtilisateur"]');
-
-        if (!userCodeInput) {
-            await endWithError('No user code input on this interface.');
-        }
-
-        await userCodeInput.type(accountInfo.authentication.userCode, { delay: 50 });
-        return await Promise.all([
-            userCodeInput.press('Enter'),
-            page.waitForSelector('#champsReponse, input[name="motDePasse"]', { timeout: 30000 }),
-        ]);
-    }
-}
-
-async function handleSecurityQuestion() {
-    status = 'handleSecurityQuestion';
-
-    let securityQuestionWrapper = await page.$('#champsReponse');
-    if (securityQuestionWrapper) {
-        verbose('The answer to security question is requested.');
-
-        let questionWrapper = await page.$('label[for="valeurReponse"]');
-        let question = (await (await (await questionWrapper.$('b')).getProperty('textContent')).jsonValue()).trim();
-        let answerInput = await page.$('input[name="valeurReponse"]');
-        let answer = null;
-
-        if (question in accountInfo.authentication.securityQuestions) {
-            answer = accountInfo.authentication.securityQuestions[question];
-        }
-
-        if (!answer) {
-            await endWithError('Unknown security question: ' + question);
-        }
-
-        verbose('Ah, this is an easy one! I got this...');
-        await answerInput.type(answer, { delay: 50 });
-
-        return await Promise.all([
-            answerInput.press('Enter'),
-            page.waitForSelector('input[name="motDePasse"]', { timeout: 30000 }),
-        ]);
-    }
-
-    return;
 }
 
 function delay(time) {
