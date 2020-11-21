@@ -60,7 +60,7 @@ async function getAllIdeasByStatus(page) {
     const statuses = await getStatuses(page);
 
     for (const status of statuses) {
-        //await delay(1500); // No need to be rude to Webflow's servers...
+        await delay(1500); // No need to be rude to Webflow's servers...
         await page.goto(status.url, { waitUntil: "networkidle2", timeout: 15000 });
         status.ideas = await getAllPaginatedIdeas(page);
     }
@@ -88,7 +88,7 @@ async function goToNextPage(page) {
         return false;
     }
 
-    //await delay(1500); // No need to be rude to Webflow's servers...
+    await delay(1500); // No need to be rude to Webflow's servers...
     await page.goto(nextPageUrl, { waitUntil: "networkidle2", timeout: 15000 });
     return true;
 }
