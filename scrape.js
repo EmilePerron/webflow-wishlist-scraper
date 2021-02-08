@@ -1,11 +1,14 @@
-const configResult = require('dotenv').config()
+const path = require('path');
+const configResult = require('dotenv').config({ path: __dirname + '/.env' })
 const axios = require('axios');
 const puppeteer = require('puppeteer');
 const wishlistUrl = 'https://wishlist.webflow.com/';
 const recentUrlQuery = '?sort=recent';
 
 // Check if a config is defined, otherwise the scraping is useless
-if (configResult.error || !configResult.parsed.PUSH_URL) {
+if (configResult.error) {
+    throw new Error(configResult.error);
+} else if (!process.env.PUSH_URL) {
     throw new Error("You must define a value for PUSH_URL in your .env file.");
 }
 
@@ -16,7 +19,7 @@ let browser;
     const page = await browser.newPage();
     await page.setExtraHTTPHeaders({ DNT: "1" });
     await page.setViewport({ width: 1920, height: 1080 });
-    await page.goto(wishlistUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.goto(wishlistUrl, { waitUntil: "networkidle2", timeout: 60000 });
 
     try {
         const ideasByStatuses = await getAllIdeasByStatus(page);
@@ -53,7 +56,7 @@ async function getStatuses(page) {
 }
 
 async function getRecentIdeas(page) {
-    await page.goto(wishlistUrl + recentUrlQuery, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.goto(wishlistUrl + recentUrlQuery, { waitUntil: "networkidle2", timeout: 60000 });
     return await getPageIdeas(page);
 }
 
@@ -62,7 +65,7 @@ async function getAllIdeasByStatus(page) {
 
     for (const status of statuses) {
         await delay(1500); // No need to be rude to Webflow's servers...
-        await page.goto(status.url, { waitUntil: "networkidle2", timeout: 30000 });
+        await page.goto(status.url, { waitUntil: "networkidle2", timeout: 60000 });
         status.ideas = await getAllPaginatedIdeas(page);
     }
 
@@ -90,7 +93,7 @@ async function goToNextPage(page) {
     }
 
     await delay(1500); // No need to be rude to Webflow's servers...
-    await page.goto(nextPageUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.goto(nextPageUrl, { waitUntil: "networkidle2", timeout: 60000 });
     return true;
 }
 
@@ -131,7 +134,7 @@ async function getPageIdeas(page) {
 async function getIdeaContentFromUrl(url) {
     await delay(1500); // No need to be rude to Webflow's servers...
     const newPage = await browser.newPage();
-    await newPage.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+    await newPage.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
 
     return await newPage.evaluate(() => {
         const descriptionNode = document.querySelector('.idea-content .description');
